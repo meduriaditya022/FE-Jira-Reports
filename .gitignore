@@ -1,0 +1,62 @@
+# ==========================================
+# GLOBAL GITIGNORE for Frontend + Backend
+# ==========================================
+
+# --------------------
+# Backend (Python / Flask)
+# --------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Environment files (keep secrets out of Git)
+backend/.env
+.env
+.env.*
+*.env
+
+# Python logs and builds
+*.log
+*.bak
+*.pid
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --------------------
+# Frontend (Node / React / Vue)
+# --------------------
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# npm and yarn logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# --------------------
+# IDE / Editor / OS Files
+# --------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db

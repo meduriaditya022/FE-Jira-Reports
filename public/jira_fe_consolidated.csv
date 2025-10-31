@@ -1,0 +1,18 @@
+board_name,issue_key,summary,status,assignee,reporter,issue_type,priority,created,updated,due_date,story_points,fix_versions,epic_link,fix_version_start_dates,fix_version_release_dates,fix_version_released,fix_version_archived
+FE Bugs,FEP-297,BUG - Order search functions using decimals,New Request,Unassigned,Susan Farill,Bug,Low,2025-06-23T17:34:50.171+0530,2025-08-28T14:39:11.995+0530,2025-09-26,0.0,,,,,,
+FE Bugs,FEP-345,Issue while adding Commission Tiers.,New Request,Unassigned,avinash.challa,Bug,Medium,2025-08-21T18:13:20.747+0530,2025-09-02T11:52:02.453+0530,2025-08-25,3.0,,,,,,
+FE Bugs,FEP-759,TexAir Isues,To Do,saipriya.gorrela,Gnanadeep Vetukuri,Bug,Medium,2025-06-23T13:20:29.869+0530,2025-09-11T11:36:52.141+0530,,0.0,V2.0.4,,2025-09-10,2025-09-26,False,False
+FE Bugs,FEP-293,Bug - Manually Completed Orders Issues,New Request,Sekhar Beri,Susan Farill,Bug,Low,2025-06-23T17:11:49.456+0530,2025-08-22T18:56:06.919+0530,2025-09-26,0.0,,,,,,
+FE Bugs,FEP-250,Military Time Fields Expecting Colons,New Request,Raja Shekhar Reddy Yarrabhumi,Susan Farill,Bug,High,2025-06-26T23:43:27.378+0530,2025-08-22T18:45:26.638+0530,2025-09-26,0.0,,,,,,
+FE Bugs,FEP-332,Commission Tiers tabs enable for Davis trucking organization,QA Tested,Satya Sai Butte,Satya Sai Butte,Bug,Medium,2025-08-21T12:46:09.176+0530,2025-08-21T18:29:22.029+0530,,0.0,,,,,,
+FE Bugs,FEP-810,FE7625: FW: Tourneau,QA Tested,JakkuvaSatish,asha.tentu,Bug,Medium,2025-09-12T15:57:40.922+0530,2025-09-17T11:42:42.641+0530,,2.0,,,,,,
+FE Bugs,FEP-346,UI - Time zone issue while retrieving routes list when route has been created on other day,Done,muralikrishna.pentakota,Rajesh Mendadala,Bug,Medium,2025-08-21T18:31:28.769+0530,2025-09-10T11:01:15.016+0530,,1.0,V2.0.3,FEP-25,2025-08-27,2025-09-20,False,False
+FE Bugs,FEP-508,Segments are not properly updated for Driver billing,Done,Tenakani Sowjanya,Rajesh Mendadala,Bug,Medium,2025-08-28T18:10:23.642+0530,2025-09-17T20:02:23.505+0530,,2.0,V2.0.2_hotfix_09_08_2025,,2025-09-08,2025-09-08,True,False
+FE Bugs,FEP-383,Re: Null - FE7560,Done,vamsi krishna reddy,Chadaram gangadhar,Bug,Medium,2025-08-22T23:38:20.991+0530,2025-09-17T20:02:26.470+0530,,3.0,V2.0.2_hotfix_09_08_2025,,2025-09-08,2025-09-08,True,False
+FE Bugs,FEP-517,TA -- Re: Assigning Driver problems - FE7620,Done,vamsi krishna reddy,satish.siyyadri,Bug,Medium,2025-08-29T01:12:57.686+0530,2025-09-17T20:02:29.091+0530,,2.0,V2.0.2_hotfix_09_08_2025,,2025-09-08,2025-09-08,True,False
+FE Bugs,FEP-463,Missing orders in invoice--AFI,Done,Brenda Chandler,Nagendra,Bug,High,2025-08-26T22:44:03.556+0530,2025-09-16T22:36:38.187+0530,,2.0,,,,,,
+FE Bugs,FEP-347,API - Time zone issue while retrieving routes list when route has been created on other day,Done,Syamala Ganugula,Rajesh Mendadala,Bug,Medium,2025-08-21T18:31:59.856+0530,2025-09-09T12:13:11.662+0530,,2.0,V2.0.3,FEP-25,2025-08-27,2025-09-20,False,False
+FE Bugs,FEP-600,FE7494: Help cant open billing,Done,Akash Kumar Dangeti,asha.tentu,Bug,Medium,2025-08-18T17:00:41.400+0530,2025-09-17T20:02:37.343+0530,,0.0,V2.0.2_hotfix_09_03_2025,,2025-09-03,2025-09-03,True,False
+FE Bugs,FEP-267,DRIVER APP - DISPATCHER ABLE TO RE-SEQUENCE DELIVERY STOP TO BE PRIOR TO PICKUP STOP,New Request,Raja Shekhar Reddy Yarrabhumi,Susan Farill,Bug,High,2025-08-07T01:57:15.236+0530,2025-09-12T19:06:35.646+0530,2025-09-12,0.0,,,,,,
+FE Bugs,FEP-268,DRIVER ASSIGNMENT ON ORDER,Analysis,Sai Ganesh Thota,Susan Farill,Bug,High,2025-08-07T02:54:47.628+0530,2025-09-10T19:13:52.618+0530,2025-09-12,0.0,,,,,,
+FE Bugs,FEP-271,Driver App - Comments Enhancement,New Request,Raja Shekhar Reddy Yarrabhumi,Susan Farill,Bug,Medium,2025-08-07T02:57:20.052+0530,2025-09-12T19:09:14.392+0530,2025-09-12,0.0,,,,,,

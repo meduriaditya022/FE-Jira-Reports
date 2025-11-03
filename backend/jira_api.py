@@ -1,18 +1,19 @@
-import os
 import asyncio
-import threading
+import os
 from datetime import datetime, timedelta
-
-import httpx
-import pandas as pd
+from dotenv import load_dotenv
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import httpx
+import pandas as pd
+import threading
 from fastapi.responses import FileResponse
-from dotenv import load_dotenv
+import logging
 
-# -----------------------
-# Load Environment Variables
-# -----------------------
+# ---------------------------------------
+# Setup & Configuration
+# ---------------------------------------
 load_dotenv()
 
 JIRA_DOMAIN = os.getenv("JIRA_DOMAIN")
@@ -26,31 +27,16 @@ STORY_POINTS_FIELD = "customfield_10024"
 EPIC_LINK_FIELD = "customfield_10014"
 SPRINT_FIELD = "customfield_10020"
 
-# -----------------------
-# FastAPI Setup
-# -----------------------
-app = FastAPI(title="Jira Cache API", version="2.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# -----------------------
-# Cache Setup
-# -----------------------
+CACHE_EXPIRY = timedelta(hours=CACHE_EXPIRY_HOURS)
 cache = {"data": None, "last_updated": None}
 cache_lock = threading.Lock()
-CACHE_EXPIRY = timedelta(hours=CACHE_EXPIRY_HOURS)
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# -----------------------
-# Jira Helper Functions
-# -----------------------
-async def get_boards(client: httpx.AsyncClient):
+# ---------------------------------------
+# Helper Functions
+# ---------------------------------------
+async def get_boards(client):
     url = f"https://{JIRA_DOMAIN}/rest/agile/1.0/board?projectKeyOrId={PROJECT_KEY}&maxResults=100"
     resp = await client.get(url, auth=(EMAIL, API_TOKEN))
     resp.raise_for_status()
@@ -58,7 +44,7 @@ async def get_boards(client: httpx.AsyncClient):
     return [b for b in boards if b["name"] not in EXCLUDED_BOARDS]
 
 
-async def get_issues(client: httpx.AsyncClient, board_id: int):
+async def get_issues(client, board_id):
     issues = []
     start_at = 0
     max_results = 50
@@ -78,7 +64,7 @@ async def get_issues(client: httpx.AsyncClient, board_id: int):
     return issues
 
 
-async def get_versions(client: httpx.AsyncClient):
+async def get_versions(client):
     url = f"https://{JIRA_DOMAIN}/rest/api/3/project/{PROJECT_KEY}/versions"
     resp = await client.get(url, auth=(EMAIL, API_TOKEN))
     resp.raise_for_status()
@@ -109,8 +95,7 @@ def split_sprints(sprint_data):
     return current, "; ".join(spillovers) if spillovers else None
 
 
-async def get_epic_name(client: httpx.AsyncClient, epic_key, epic_cache):
-    """Fetch and cache Epic names."""
+async def get_epic_name(client, epic_key, epic_cache):
     if not epic_key:
         return None
     if epic_key in epic_cache:
@@ -125,21 +110,19 @@ async def get_epic_name(client: httpx.AsyncClient, epic_key, epic_cache):
         epic_cache[epic_key] = epic_name
         return epic_name
     except Exception as e:
-        print(f"⚠️ Could not fetch epic name for {epic_key}: {e}")
+        logging.warning(f"⚠️ Could not fetch epic name for {epic_key}: {e}")
         epic_cache[epic_key] = None
         return None
 
 
-# -----------------------
-# Core Jira Data Fetching
-# -----------------------
+# ---------------------------------------
+# Core Jira Fetching Logic
+# ---------------------------------------
 async def fetch_jira_data():
-    """Fetch and enrich all Jira data."""
     all_rows = []
     epic_cache = {}
 
     async with httpx.AsyncClient() as client:
-        # Versions
         versions_dict = {}
         try:
             versions = await get_versions(client)
@@ -151,168 +134,157 @@ async def fetch_jira_data():
                     "archived": v.get("archived"),
                 }
         except Exception as e:
-            print(f"⚠️ Could not fetch versions: {e}")
+            logging.warning(f"⚠️ Could not fetch versions: {e}")
 
         boards = await get_boards(client)
-        print(f"📋 Found {len(boards)} boards in {PROJECT_KEY}")
+        logging.info(f"📋 Found {len(boards)} boards in {PROJECT_KEY}")
 
         for board in boards:
             board_id = board["id"]
             board_name = board["name"]
-            print(f"🔍 Fetching issues for {board_name} (ID: {board_id})")
+            logging.info(f"🔍 Fetching issues for {board_name} (ID: {board_id})")
 
             try:
                 issues = await get_issues(client, board_id)
                 for issue in issues:
                     fields = issue.get("fields", {})
                     issue_key = issue.get("key")
-                    assignee = (
-                        fields.get("assignee", {}).get("displayName")
-                        if fields.get("assignee")
-                        else "Unassigned"
-                    )
-                    status = (
-                        fields.get("status", {}).get("name")
-                        if fields.get("status")
-                        else "Unknown"
-                    )
+                    assignee = fields.get("assignee", {}).get("displayName") if fields.get("assignee") else "Unassigned"
+                    status = fields.get("status", {}).get("name") if fields.get("status") else "Unknown"
                     sp = fields.get(STORY_POINTS_FIELD) or 0
                     fix_versions = [v.get("name") for v in fields.get("fixVersions", [])]
-                    current_sprint, sprint_spillover = split_sprints(
-                        fields.get(SPRINT_FIELD)
-                    )
+                    current_sprint, sprint_spillover = split_sprints(fields.get(SPRINT_FIELD))
                     is_completed = status.lower() in ["done", "closed", "completed"]
 
-                    version_info = (
-                        versions_dict.get(fix_versions[0]) if fix_versions else {}
-                    )
+                    version_info = versions_dict.get(fix_versions[0]) if fix_versions else {}
                     epic_link = fields.get(EPIC_LINK_FIELD)
                     epic_name = await get_epic_name(client, epic_link, epic_cache)
 
-                    all_rows.append(
-                        {
-                            "board_name": board_name,
-                            "issue_key": issue_key,
-                            "summary": fields.get("summary"),
-                            "status": status,
-                            "is_completed": is_completed,
-                            "assignee": assignee,
-                            "reporter": fields.get("reporter", {}).get("displayName")
-                            if fields.get("reporter")
-                            else None,
-                            "issue_type": fields.get("issuetype", {}).get("name")
-                            if fields.get("issuetype")
-                            else None,
-                            "priority": fields.get("priority", {}).get("name")
-                            if fields.get("priority")
-                            else None,
-                            "created": fields.get("created"),
-                            "updated": fields.get("updated"),
-                            "due_date": fields.get("duedate"),
-                            "story_points": sp,
-                            "fix_versions": ", ".join(fix_versions),
-                            "version_start_date": version_info.get("start_date"),
-                            "version_release_date": version_info.get("release_date"),
-                            "version_released": version_info.get("released"),
-                            "epic_link": epic_link,
-                            "epic_name": epic_name,
-                            "current_sprint": current_sprint,
-                            "sprint_spillover": sprint_spillover,
-                            "is_spillover": 1 if sprint_spillover else 0,
-                        }
-                    )
+                    all_rows.append({
+                        "board_name": board_name,
+                        "issue_key": issue_key,
+                        "summary": fields.get("summary"),
+                        "status": status,
+                        "is_completed": is_completed,
+                        "assignee": assignee,
+                        "reporter": fields.get("reporter", {}).get("displayName") if fields.get("reporter") else None,
+                        "issue_type": fields.get("issuetype", {}).get("name") if fields.get("issuetype") else None,
+                        "priority": fields.get("priority", {}).get("name") if fields.get("priority") else None,
+                        "created": fields.get("created"),
+                        "updated": fields.get("updated"),
+                        "due_date": fields.get("duedate"),
+                        "story_points": sp,
+                        "fix_versions": ", ".join(fix_versions),
+                        "version_start_date": version_info.get("start_date"),
+                        "version_release_date": version_info.get("release_date"),
+                        "version_released": version_info.get("released"),
+                        "epic_link": epic_link,
+                        "epic_name": epic_name,
+                        "current_sprint": current_sprint,
+                        "sprint_spillover": sprint_spillover,
+                        "is_spillover": 1 if sprint_spillover else 0,
+                    })
             except Exception as e:
-                print(f"⚠️ Error fetching issues for {board_name}: {e}")
+                logging.warning(f"⚠️ Error fetching issues for {board_name}: {e}")
                 continue
 
-    print(f"✅ Jira data fetch complete: {len(all_rows)} rows")
     return {"rows": all_rows, "last_updated": datetime.now()}
 
 
-# -----------------------
+# ---------------------------------------
 # Cache Management
-# -----------------------
+# ---------------------------------------
 async def refresh_cache():
-    """Refresh Jira data and update cache safely."""
     with cache_lock:
-        print("♻️ Refreshing Jira cache...")
+        logging.info("♻️ Refreshing Jira data...")
         cache["data"] = await fetch_jira_data()
         cache["last_updated"] = datetime.now()
+        logging.info("✅ Cache updated successfully.")
 
 
-def get_cached_data():
-    """Return cached data if fresh, otherwise trigger refresh."""
-    if (
-        not cache["data"]
-        or not cache["last_updated"]
-        or datetime.now() - cache["last_updated"] > CACHE_EXPIRY
-    ):
-        print("⚠️ Cache expired or empty. Returning old data and scheduling refresh.")
-        asyncio.create_task(refresh_cache())
-    else:
-        print("✅ Returning cached Jira data.")
-    return cache["data"]
-
-
-# -----------------------
-# Background Auto-Refresh Loop
-# -----------------------
 async def auto_refresh_loop():
-    """Periodically refresh Jira data in the background."""
     while True:
         await asyncio.sleep(CACHE_EXPIRY.total_seconds())
+        logging.info("🕒 Auto-refreshing Jira cache...")
         await refresh_cache()
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Run initial data fetch and start background scheduler."""
-    print("🚀 Initializing Jira cache...")
+def get_cached_data():
+    with cache_lock:
+        return cache
+
+
+# ---------------------------------------
+# Lifespan Manager (modern startup/shutdown)
+# ---------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.info("🚀 FastAPI Jira API starting up — fetching initial cache...")
     await refresh_cache()
     asyncio.create_task(auto_refresh_loop())
+    yield
+    logging.info("🛑 FastAPI Jira API shutting down...")
 
 
-# -----------------------
+# ---------------------------------------
+# FastAPI App Setup
+# ---------------------------------------
+app = FastAPI(title="Jira Cache API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------
 # API Endpoints
-# -----------------------
+# ---------------------------------------
 @app.get("/api/jira/data")
 async def get_jira_data():
     data = get_cached_data()
     return {
         "success": True,
-        "data": data["rows"] if data else [],
-        "last_updated": cache["last_updated"].isoformat() if cache["last_updated"] else None,
+        "data": data["data"]["rows"] if data["data"] else [],
+        "last_updated": data["last_updated"].isoformat() if data["last_updated"] else None,
     }
 
 
 @app.post("/api/jira/refresh")
 async def force_refresh(background_tasks: BackgroundTasks):
     background_tasks.add_task(refresh_cache)
-    return {"success": True, "message": "Manual cache refresh started"}
+    return {"success": True, "message": "Manual cache refresh started."}
 
 
 @app.get("/api/jira/export")
 async def export_jira_data():
-    """Export cached Jira data to CSV."""
-    data = cache["data"]
-    if not data or not data.get("rows"):
-        return {"success": False, "message": "No data in cache to export"}
-
-    df = pd.DataFrame(data["rows"])
+    data = get_cached_data()
+    df = pd.DataFrame(data["data"]["rows"])
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"jira_export_{timestamp}.csv"
     filepath = os.path.join(os.getcwd(), filename)
     df.to_csv(filepath, index=False)
-
-    print(f"✅ Exported {len(df)} rows to {filename}")
+    logging.info(f"✅ Exported {len(df)} rows to {filename}")
     return FileResponse(filepath, filename=filename, media_type="text/csv")
 
 
 @app.get("/api/jira/health")
-async def health_check():
+async def health():
+    data = get_cached_data()
     return {
         "success": True,
-        "last_updated": cache["last_updated"].isoformat() if cache["last_updated"] else None,
+        "last_updated": data["last_updated"].isoformat() if data["last_updated"] else None,
         "timestamp": datetime.now().isoformat(),
-        "message": "FastAPI Jira service is running fine",
+        "message": "Jira service running fine",
     }
+
+
+# ---------------------------------------
+# Run Locally
+# ---------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("jira_api:app", host="0.0.0.0", port=5050, reload=True)

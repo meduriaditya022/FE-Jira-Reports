@@ -1,13 +1,14 @@
+import os
+import threading
+from datetime import datetime, timedelta
+
+import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
 from flask import Flask, jsonify, send_file
 from flask_cors import CORS
-from datetime import datetime, timedelta
-import threading
-import pandas as pd
-import os
+from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-
 
 # -----------------------
 # Flask Setup
@@ -43,6 +44,7 @@ cache = {
 }
 CACHE_EXPIRY = timedelta(hours=CACHE_EXPIRY_HOURS)
 cache_lock = threading.Lock()
+is_refreshing = False  # flag to prevent overlapping refreshes
 
 # -----------------------
 # Jira Helper Functions
@@ -103,7 +105,6 @@ def split_sprints(sprint_data):
     return current, "; ".join(spillovers) if spillovers else None
 
 def get_epic_name(epic_key, epic_cache):
-    """Fetch and cache Epic names to avoid repeated API calls."""
     if not epic_key:
         return None
     if epic_key in epic_cache:
@@ -217,6 +218,38 @@ def get_cached_jira_data(force_refresh=False):
         return cache["data"]
 
 # -----------------------
+# Background Refresh
+# -----------------------
+def background_refresh():
+    """Run cache refresh in a separate background thread."""
+    global is_refreshing
+    if is_refreshing:
+        print("⚙️ A refresh is already in progress — skipping this cycle.")
+        return
+    is_refreshing = True
+
+    def run_refresh():
+        global is_refreshing
+        try:
+            print("🕒 Background cache refresh started...")
+            get_cached_jira_data(force_refresh=True)
+            print("✅ Background cache refresh complete.")
+        except Exception as e:
+            print(f"⚠️ Background refresh failed: {e}")
+        finally:
+            is_refreshing = False
+
+    thread = threading.Thread(target=run_refresh, daemon=True)
+    thread.start()
+
+def start_scheduler():
+    """Start APScheduler for periodic refreshes."""
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(background_refresh, "interval", hours=CACHE_EXPIRY_HOURS)
+    scheduler.start()
+    print(f"⏰ Scheduler started — automatic refresh every {CACHE_EXPIRY_HOURS} hours.")
+
+# -----------------------
 # API Endpoints
 # -----------------------
 @app.route("/api/jira/data", methods=["GET"])
@@ -230,22 +263,19 @@ def get_jira_data():
 
 @app.route("/api/jira/export", methods=["GET"])
 def export_jira_data():
-    """Export cached Jira data to CSV file."""
     data = get_cached_jira_data()
     df = pd.DataFrame(data["rows"])
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"jira_export_{timestamp}.csv"
     filepath = os.path.join(os.getcwd(), filename)
     df.to_csv(filepath, index=False)
-
     print(f"✅ Exported {len(df)} rows to {filename}")
     return send_file(filepath, as_attachment=True)
 
 @app.route("/api/jira/refresh", methods=["POST"])
 def refresh_cache():
-    get_cached_jira_data(force_refresh=True)
-    return jsonify({"success": True, "message": "Cache refreshed successfully"})
+    background_refresh()
+    return jsonify({"success": True, "message": "Background cache refresh triggered"})
 
 @app.route("/api/jira/health", methods=["GET"])
 def health():
@@ -260,4 +290,7 @@ def health():
 # Run Flask App
 # -----------------------
 if __name__ == "__main__":
+    print("🚀 Initializing Jira cache on startup...")
+    background_refresh()     # Preload cache
+    start_scheduler()        # Auto-refresh every 12h
     app.run(debug=True, host="0.0.0.0", port=5050)
